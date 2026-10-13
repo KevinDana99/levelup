@@ -10,8 +10,9 @@ export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
-  const { setMealPhotoUri } = useMealCapture();
+  const { requestMealAnalysis, setMealPhotoUri } = useMealCapture();
 
   const closeCamera = () => {
     if (router.canGoBack()) router.back();
@@ -23,16 +24,20 @@ export default function CameraScreen() {
 
     try {
       setIsTakingPhoto(true);
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
-      if (photo?.uri) setPhotoUri(photo.uri);
+      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.85 });
+      if (photo?.uri && photo.base64) {
+        setPhotoUri(photo.uri);
+        setPhotoBase64(photo.base64);
+      }
     } finally {
       setIsTakingPhoto(false);
     }
   };
 
   const confirmPhoto = () => {
-    if (!photoUri) return;
+    if (!photoUri || !photoBase64) return;
     setMealPhotoUri(photoUri);
+    void requestMealAnalysis({ image: photoBase64, plateSize: 'medium' });
     closeCamera();
   };
 
@@ -76,7 +81,13 @@ export default function CameraScreen() {
             <Text style={styles.previewTitle}>REVISAR CAPTURA</Text>
           </View>
           <View style={styles.previewActions}>
-            <Pressable style={[styles.previewButton, styles.retakeButton]} onPress={() => setPhotoUri(null)}>
+            <Pressable
+              style={[styles.previewButton, styles.retakeButton]}
+              onPress={() => {
+                setPhotoUri(null);
+                setPhotoBase64(null);
+              }}
+            >
               <Text style={styles.previewButtonText}>↻ [ REPETIR ]</Text>
             </Pressable>
             <Pressable style={[styles.previewButton, styles.useButton]} onPress={confirmPhoto}>

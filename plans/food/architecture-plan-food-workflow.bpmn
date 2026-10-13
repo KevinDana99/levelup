@@ -1,0 +1,334 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_LevelUp" targetNamespace="https://levelup.local/bpmn" exporter="LevelUp Architecture" exporterVersion="1.0">
+  <bpmn:process id="Process_LevelUp" name="LevelUp | Nutrición - responsabilidades" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Responsibilities">
+      <bpmn:lane id="Lane_Board" name="Tablero · React Native / Expo">
+        <bpmn:flowNodeRef>start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>capture</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>choice</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>done</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>cancel</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Background" name="Background · coordinación asíncrona">
+        <bpmn:flowNodeRef>request</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>response</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Functions" name="Supabase · Edge Functions HTTP">
+        <bpmn:flowNodeRef>analyze</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>confirm</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Services" name="Supabase · servicios internos">
+        <bpmn:flowNodeRef>ai</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>food</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>usda</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>match</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>off</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>calc</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_External" name="APIs externas / Persistencia">
+        <bpmn:flowNodeRef>gemini</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>usda_api</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>off_api</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>db</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="start" name="Inicio · foto de comida"/>
+    <bpmn:userTask id="capture" name="Capturar foto + preferencias"/>
+    <bpmn:task id="request" name="Solicitar análisis"/>
+    <bpmn:serviceTask id="analyze" name="analyze-meal/index.ts" implementation="##unspecified"/>
+    <bpmn:task id="ai" name="handleAIService.ts"/>
+    <bpmn:task id="gemini" name="Gemini API · visión / tools"/>
+    <bpmn:task id="food" name="handleFindByFood.ts"/>
+    <bpmn:task id="usda" name="searchUSDA.ts"/>
+    <bpmn:task id="usda_api" name="USDA FoodData Central"/>
+    <bpmn:exclusiveGateway id="match" name="¿Coincidencia válida?"/>
+    <bpmn:task id="off" name="searchOpenFoodFacts.ts"/>
+    <bpmn:task id="off_api" name="Open Food Facts API"/>
+    <bpmn:task id="calc" name="calculateNutrition.ts"/>
+    <bpmn:task id="response" name="Resultado de analyze-meal"/>
+    <bpmn:userTask id="review" name="Tablero · revisar / editar"/>
+    <bpmn:exclusiveGateway id="choice" name="¿Confirmar?"/>
+    <bpmn:serviceTask id="confirm" name="confirm-meal/index.ts" implementation="##unspecified"/>
+    <bpmn:task id="db" name="Supabase PostgreSQL"/>
+    <bpmn:endEvent id="done" name="Comida guardada"/>
+    <bpmn:endEvent id="cancel" name="Cancelar registro"/>
+    <bpmn:sequenceFlow id="Flow_0" sourceRef="start" targetRef="capture"/>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="capture" targetRef="request"/>
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="request" targetRef="analyze"/>
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="analyze" targetRef="ai"/>
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="ai" targetRef="gemini"/>
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="gemini" targetRef="food" name="Function calling"/>
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="food" targetRef="usda"/>
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="usda" targetRef="usda_api"/>
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="usda_api" targetRef="match"/>
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="match" targetRef="calc" name="Sí"/>
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="match" targetRef="off" name="No"/>
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="off" targetRef="off_api"/>
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="off_api" targetRef="calc"/>
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="calc" targetRef="response"/>
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="response" targetRef="review"/>
+    <bpmn:sequenceFlow id="Flow_15" sourceRef="review" targetRef="choice"/>
+    <bpmn:sequenceFlow id="Flow_16" sourceRef="choice" targetRef="confirm" name="Sí"/>
+    <bpmn:sequenceFlow id="Flow_17" sourceRef="choice" targetRef="cancel" name="No"/>
+    <bpmn:sequenceFlow id="Flow_18" sourceRef="confirm" targetRef="db"/>
+    <bpmn:sequenceFlow id="Flow_19" sourceRef="db" targetRef="done"/>
+    <bpmn:textAnnotation id="DTO_analyze">
+      <bpmn:text>AnalyzeMealRequestDTO → AnalyzeMealResponseDTO</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_DTO_analyze" sourceRef="analyze" targetRef="DTO_analyze"/>
+    <bpmn:textAnnotation id="DTO_confirm">
+      <bpmn:text>ConfirmMealRequestDTO → ConfirmMealResponseDTO</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_DTO_confirm" sourceRef="confirm" targetRef="DTO_confirm"/>
+    <bpmn:textAnnotation id="DTO_ai">
+      <bpmn:text>AIRequestDTO → AIResponseDTO; AIContracts.ts</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_DTO_ai" sourceRef="ai" targetRef="DTO_ai"/>
+    <bpmn:textAnnotation id="DTO_food">
+      <bpmn:text>FindByFoodInputDTO → FindByFoodOutputDTO (pendiente)</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_DTO_food" sourceRef="food" targetRef="DTO_food"/>
+    <bpmn:textAnnotation id="DTO_shared">
+      <bpmn:text>_shared/dtos: FoodDTO, NutritionDTO, MealDTO
+_shared/clients: supabase.client.ts</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_DTO_shared" sourceRef="calc" targetRef="DTO_shared"/>
+  </bpmn:process>
+  <bpmn:collaboration id="Collaboration_LevelUp"><bpmn:participant id="Participant_LevelUp" name="LevelUp · Nutrición" processRef="Process_LevelUp"/></bpmn:collaboration><bpmndi:BPMNDiagram id="Diagram_LevelUp">
+    <bpmndi:BPMNPlane id="Plane_LevelUp" bpmnElement="Collaboration_LevelUp">
+      <bpmndi:BPMNShape xmlns:ns1="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_Participant_LevelUp" bpmnElement="Participant_LevelUp" isHorizontal="true" ns1:fill="#242424" ns1:stroke="#AAAAAA"><dc:Bounds x="20" y="60" width="3480" height="950"/></bpmndi:BPMNShape><bpmndi:BPMNShape xmlns:ns0="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_Lane_Board" bpmnElement="Lane_Board" isHorizontal="true" ns0:stroke="#A3A3A3">
+        <dc:Bounds x="50" y="60" width="3450" height="190"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns1="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_Lane_Background" bpmnElement="Lane_Background" isHorizontal="true" ns1:stroke="#A3A3A3">
+        <dc:Bounds x="50" y="250" width="3450" height="190"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns2="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_Lane_Functions" bpmnElement="Lane_Functions" isHorizontal="true" ns2:stroke="#A3A3A3">
+        <dc:Bounds x="50" y="440" width="3450" height="190"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns3="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_Lane_Services" bpmnElement="Lane_Services" isHorizontal="true" ns3:stroke="#A3A3A3">
+        <dc:Bounds x="50" y="630" width="3450" height="190"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns4="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_Lane_External" bpmnElement="Lane_External" isHorizontal="true" ns4:stroke="#A3A3A3">
+        <dc:Bounds x="50" y="820" width="3450" height="190"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns5="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_start" bpmnElement="start" ns5:fill="#2A2A2A" ns5:stroke="#E2E8F0">
+        <dc:Bounds x="85" y="108" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns6="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_capture" bpmnElement="capture" ns6:fill="#2A2A2A" ns6:stroke="#E2E8F0">
+        <dc:Bounds x="230" y="105" width="160" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns7="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_request" bpmnElement="request" ns7:fill="#2A2A2A" ns7:stroke="#E2E8F0">
+        <dc:Bounds x="455" y="295" width="165" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns8="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_analyze" bpmnElement="analyze" ns8:fill="#2A2A2A" ns8:stroke="#E2E8F0">
+        <dc:Bounds x="680" y="485" width="170" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns9="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_ai" bpmnElement="ai" ns9:fill="#2A2A2A" ns9:stroke="#E2E8F0">
+        <dc:Bounds x="900" y="675" width="160" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns10="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_gemini" bpmnElement="gemini" ns10:fill="#2A2A2A" ns10:stroke="#E2E8F0">
+        <dc:Bounds x="1120" y="865" width="170" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns11="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_food" bpmnElement="food" ns11:fill="#2A2A2A" ns11:stroke="#E2E8F0">
+        <dc:Bounds x="1340" y="675" width="160" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns12="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_usda" bpmnElement="usda" ns12:fill="#2A2A2A" ns12:stroke="#E2E8F0">
+        <dc:Bounds x="1570" y="675" width="160" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns13="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_usda_api" bpmnElement="usda_api" ns13:fill="#2A2A2A" ns13:stroke="#E2E8F0">
+        <dc:Bounds x="1790" y="865" width="170" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns14="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_match" bpmnElement="match" ns14:fill="#2A2A2A" ns14:stroke="#E2E8F0">
+        <dc:Bounds x="2030" y="686" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns15="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_off" bpmnElement="off" ns15:fill="#2A2A2A" ns15:stroke="#E2E8F0">
+        <dc:Bounds x="2190" y="675" width="160" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns16="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_off_api" bpmnElement="off_api" ns16:fill="#2A2A2A" ns16:stroke="#E2E8F0">
+        <dc:Bounds x="2390" y="865" width="170" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns17="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_calc" bpmnElement="calc" ns17:fill="#2A2A2A" ns17:stroke="#E2E8F0">
+        <dc:Bounds x="2590" y="675" width="160" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns18="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_response" bpmnElement="response" ns18:fill="#2A2A2A" ns18:stroke="#E2E8F0">
+        <dc:Bounds x="2430" y="295" width="165" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns19="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_review" bpmnElement="review" ns19:fill="#2A2A2A" ns19:stroke="#E2E8F0">
+        <dc:Bounds x="2640" y="105" width="170" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns20="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_choice" bpmnElement="choice" ns20:fill="#2A2A2A" ns20:stroke="#E2E8F0">
+        <dc:Bounds x="2870" y="116" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns21="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_confirm" bpmnElement="confirm" ns21:fill="#2A2A2A" ns21:stroke="#E2E8F0">
+        <dc:Bounds x="3110" y="485" width="170" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns22="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_db" bpmnElement="db" ns22:fill="#2A2A2A" ns22:stroke="#E2E8F0">
+        <dc:Bounds x="3310" y="865" width="150" height="72"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns23="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_done" bpmnElement="done" ns23:fill="#2A2A2A" ns23:stroke="#E2E8F0">
+        <dc:Bounds x="3400" y="105" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape xmlns:ns24="http://bpmn.io/schema/bpmn/biocolor/1.0" id="Shape_cancel" bpmnElement="cancel" ns24:fill="#2A2A2A" ns24:stroke="#E2E8F0">
+        <dc:Bounds x="3040" y="105" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DTO_analyze" bpmnElement="DTO_analyze">
+        <dc:Bounds x="675" y="565" width="265" height="62"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DTO_confirm" bpmnElement="DTO_confirm">
+        <dc:Bounds x="3100" y="565" width="300" height="62"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DTO_ai" bpmnElement="DTO_ai">
+        <dc:Bounds x="880" y="760" width="280" height="62"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DTO_food" bpmnElement="DTO_food">
+        <dc:Bounds x="1320" y="760" width="320" height="62"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_DTO_shared" bpmnElement="DTO_shared">
+        <dc:Bounds x="2670" y="865" width="315" height="75"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_0" bpmnElement="Flow_0">
+        <di:waypoint x="121" y="126.0"/>
+        <di:waypoint x="175.5" y="126.0"/>
+        <di:waypoint x="175.5" y="141.0"/>
+        <di:waypoint x="230" y="141.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_1" bpmnElement="Flow_1">
+        <di:waypoint x="390" y="141.0"/>
+        <di:waypoint x="422.5" y="141.0"/>
+        <di:waypoint x="422.5" y="331.0"/>
+        <di:waypoint x="455" y="331.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_2" bpmnElement="Flow_2">
+        <di:waypoint x="620" y="331.0"/>
+        <di:waypoint x="650.0" y="331.0"/>
+        <di:waypoint x="650.0" y="521.0"/>
+        <di:waypoint x="680" y="521.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_3" bpmnElement="Flow_3">
+        <di:waypoint x="850" y="521.0"/>
+        <di:waypoint x="875.0" y="521.0"/>
+        <di:waypoint x="875.0" y="711.0"/>
+        <di:waypoint x="900" y="711.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_4" bpmnElement="Flow_4">
+        <di:waypoint x="1060" y="711.0"/>
+        <di:waypoint x="1090.0" y="711.0"/>
+        <di:waypoint x="1090.0" y="901.0"/>
+        <di:waypoint x="1120" y="901.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_5" bpmnElement="Flow_5">
+        <di:waypoint x="1290" y="901.0"/>
+        <di:waypoint x="1315.0" y="901.0"/>
+        <di:waypoint x="1315.0" y="711.0"/>
+        <di:waypoint x="1340" y="711.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_6" bpmnElement="Flow_6">
+        <di:waypoint x="1500" y="711.0"/>
+        <di:waypoint x="1570" y="711.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_7" bpmnElement="Flow_7">
+        <di:waypoint x="1730" y="711.0"/>
+        <di:waypoint x="1760.0" y="711.0"/>
+        <di:waypoint x="1760.0" y="901.0"/>
+        <di:waypoint x="1790" y="901.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_8" bpmnElement="Flow_8">
+        <di:waypoint x="1960" y="901.0"/>
+        <di:waypoint x="1995.0" y="901.0"/>
+        <di:waypoint x="1995.0" y="711.0"/>
+        <di:waypoint x="2030" y="711.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_9" bpmnElement="Flow_9">
+        <di:waypoint x="2080" y="711.0"/>
+        <di:waypoint x="2590" y="711.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10">
+        <di:waypoint x="2080" y="711.0"/>
+        <di:waypoint x="2190" y="711.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11">
+        <di:waypoint x="2350" y="711.0"/>
+        <di:waypoint x="2370.0" y="711.0"/>
+        <di:waypoint x="2370.0" y="901.0"/>
+        <di:waypoint x="2390" y="901.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12">
+        <di:waypoint x="2560" y="901.0"/>
+        <di:waypoint x="2575.0" y="901.0"/>
+        <di:waypoint x="2575.0" y="711.0"/>
+        <di:waypoint x="2590" y="711.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_13" bpmnElement="Flow_13">
+        <di:waypoint x="2670.0" y="747"/>
+        <di:waypoint x="2670.0" y="521.0"/>
+        <di:waypoint x="2512.5" y="521.0"/>
+        <di:waypoint x="2512.5" y="295"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_14" bpmnElement="Flow_14">
+        <di:waypoint x="2595" y="331.0"/>
+        <di:waypoint x="2617.5" y="331.0"/>
+        <di:waypoint x="2617.5" y="141.0"/>
+        <di:waypoint x="2640" y="141.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_15" bpmnElement="Flow_15">
+        <di:waypoint x="2810" y="141.0"/>
+        <di:waypoint x="2870" y="141.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_16" bpmnElement="Flow_16">
+        <di:waypoint x="2920" y="141.0"/>
+        <di:waypoint x="3015.0" y="141.0"/>
+        <di:waypoint x="3015.0" y="521.0"/>
+        <di:waypoint x="3110" y="521.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_17" bpmnElement="Flow_17">
+        <di:waypoint x="2920" y="141.0"/>
+        <di:waypoint x="2980.0" y="141.0"/>
+        <di:waypoint x="2980.0" y="123.0"/>
+        <di:waypoint x="3040" y="123.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_18" bpmnElement="Flow_18">
+        <di:waypoint x="3280" y="521.0"/>
+        <di:waypoint x="3295.0" y="521.0"/>
+        <di:waypoint x="3295.0" y="901.0"/>
+        <di:waypoint x="3310" y="901.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_19" bpmnElement="Flow_19">
+        <di:waypoint x="3385.0" y="937"/>
+        <di:waypoint x="3385.0" y="521.0"/>
+        <di:waypoint x="3418.0" y="521.0"/>
+        <di:waypoint x="3418.0" y="105"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DTO_analyze" bpmnElement="Assoc_DTO_analyze">
+        <di:waypoint x="765.0" y="557"/>
+        <di:waypoint x="765.0" y="561.0"/>
+        <di:waypoint x="807.5" y="561.0"/>
+        <di:waypoint x="807.5" y="565"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DTO_confirm" bpmnElement="Assoc_DTO_confirm">
+        <di:waypoint x="3195.0" y="557"/>
+        <di:waypoint x="3195.0" y="561.0"/>
+        <di:waypoint x="3250.0" y="561.0"/>
+        <di:waypoint x="3250.0" y="565"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DTO_ai" bpmnElement="Assoc_DTO_ai">
+        <di:waypoint x="980.0" y="747"/>
+        <di:waypoint x="980.0" y="753.5"/>
+        <di:waypoint x="1020.0" y="753.5"/>
+        <di:waypoint x="1020.0" y="760"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DTO_food" bpmnElement="Assoc_DTO_food">
+        <di:waypoint x="1420.0" y="747"/>
+        <di:waypoint x="1420.0" y="753.5"/>
+        <di:waypoint x="1480.0" y="753.5"/>
+        <di:waypoint x="1480.0" y="760"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_DTO_shared" bpmnElement="Assoc_DTO_shared">
+        <di:waypoint x="2670.0" y="747"/>
+        <di:waypoint x="2670.0" y="806.0"/>
+        <di:waypoint x="2827.5" y="806.0"/>
+        <di:waypoint x="2827.5" y="865"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

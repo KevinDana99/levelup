@@ -44,7 +44,7 @@ export default function HomeScreen() {
   const [water, setWater] = useState(2.8);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [isOpeningCamera, setIsOpeningCamera] = useState(false);
-  const { mealPhotoUri } = useMealCapture();
+  const { mealAnalysisStatus, mealPhotoUri } = useMealCapture();
   const registered = Boolean(mealPhotoUri);
   const waterPercent = Math.min((water / 3.5) * 100, 100);
 
@@ -87,7 +87,17 @@ export default function HomeScreen() {
             <ImageBackground source={mealPhotoUri ? { uri: mealPhotoUri } : MEAL_IMAGE} style={styles.mealImage} imageStyle={styles.mealImageRadius}>
               <View style={styles.imageShade} />
               <View style={styles.scannerTopRow}>
-                <View style={styles.scanPill}><Text style={styles.scanPillText}>● ESCÁNER DE ALIMENTOS IA</Text></View>
+                <View style={styles.scanPill}>
+                  <Text style={styles.scanPillText}>
+                    {mealAnalysisStatus === 'loading'
+                      ? '● ANALIZANDO COMIDA...'
+                      : mealAnalysisStatus === 'error'
+                        ? '● ERROR DE ANÁLISIS'
+                        : mealAnalysisStatus === 'success'
+                          ? '● ANÁLISIS COMPLETADO'
+                          : '● ESCÁNER DE ALIMENTOS IA'}
+                  </Text>
+                </View>
                 <Text style={styles.weightBadge}>420g</Text>
               </View>
               <View style={styles.targetBox}>
