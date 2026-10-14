@@ -28,6 +28,15 @@ const MEAL_IMAGE = require('../../../assets/meal-salmon.jpg');
 
 type MacroCardProps = { label: string; value: string; progress: number; color: string };
 
+function formatRounded(value: number) {
+  return Math.round(value).toLocaleString('es-AR');
+}
+
+function getMacroCaloriePercentage(grams: number, caloriesPerGram: number, totalCalories: number) {
+  if (totalCalories <= 0) return 0;
+  return Math.min(Math.round(((grams * caloriesPerGram) / totalCalories) * 100), 100);
+}
+
 function MacroCard({ label, value, progress, color }: MacroCardProps) {
   return (
     <View style={[styles.macroCard, { borderColor: color }]}>
@@ -44,9 +53,40 @@ export default function HomeScreen() {
   const [water, setWater] = useState(2.8);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [isOpeningCamera, setIsOpeningCamera] = useState(false);
-  const { mealAnalysisStatus, mealPhotoUri } = useMealCapture();
+  const { mealAnalysis, mealAnalysisError, mealAnalysisStatus, mealPhotoUri } = useMealCapture();
   const registered = Boolean(mealPhotoUri);
   const waterPercent = Math.min((water / 3.5) * 100, 100);
+  const foods = mealAnalysis?.foods ?? [];
+  const nutrition = mealAnalysis?.totalNutrition;
+  const hasAnalysis = mealAnalysisStatus === 'success' && Boolean(mealAnalysis);
+  const totalWeight = foods.reduce((total, food) => total + food.estimatedGrams, 0);
+  const averageConfidence = foods.length > 0
+    ? foods.reduce((total, food) => total + food.confidence, 0) / foods.length
+    : 0;
+  const hasEstimatedNutrition = foods.some((food) => food.isEstimated);
+  const mealName = foods.length > 0
+    ? foods.map((food) => food.name).join(' + ')
+    : mealAnalysisStatus === 'loading'
+      ? 'Analizando alimentos...'
+      : mealAnalysisStatus === 'error'
+        ? 'No se pudo analizar la comida'
+        : 'Tomá una foto de tu comida';
+  const detectionLabel = hasAnalysis
+    ? hasEstimatedNutrition
+      ? '⚠ DATOS ESTIMADOS POR IA'
+      : '⚑ PLATO DETECTADO'
+    : mealAnalysisStatus === 'loading'
+      ? '◎ PROCESANDO IMAGEN'
+      : mealAnalysisStatus === 'error'
+        ? '⚠ ANÁLISIS FALLIDO'
+        : '◎ LISTO PARA ESCANEAR';
+  const calories = hasAnalysis && nutrition ? formatRounded(nutrition.calories) : '0';
+  const protein = hasAnalysis && nutrition ? `${formatRounded(nutrition.protein)}g` : '0g';
+  const carbohydrates = hasAnalysis && nutrition
+    ? `${formatRounded(nutrition.carbohydrates)}g`
+    : '0g';
+  const fat = hasAnalysis && nutrition ? `${formatRounded(nutrition.fat)}g` : '0g';
+  const totalCalories = nutrition?.calories ?? 0;
 
   const openCamera = async () => {
     if (isOpeningCamera) return;
@@ -98,7 +138,9 @@ export default function HomeScreen() {
                           : '● ESCÁNER DE ALIMENTOS IA'}
                   </Text>
                 </View>
-                <Text style={styles.weightBadge}>420g</Text>
+                <Text style={styles.weightBadge}>
+                  {hasAnalysis ? `${formatRounded(totalWeight)}g` : '0g'}
+                </Text>
               </View>
               <View style={styles.targetBox}>
                 <View style={[styles.corner, styles.cornerTopLeft]} />
@@ -109,13 +151,18 @@ export default function HomeScreen() {
               </View>
               <View style={styles.mealResult}>
                 <View style={styles.mealResultTop}>
-                  <Text style={styles.detected}>⚑ PLATO DETECTADO</Text>
-                  <Text style={styles.mealCalories}>685</Text>
+                  <Text style={styles.detected}>
+                    {detectionLabel}
+                  </Text>
+                  <Text style={styles.mealCalories}>{calories}</Text>
                 </View>
                 <View style={styles.mealResultBottom}>
-                  <Text numberOfLines={1} style={styles.mealName}>Salmón Grillado + Quinoa</Text>
+                  <Text numberOfLines={1} style={styles.mealName}>{mealName}</Text>
                   <Text style={styles.kcalLabel}>KCAL</Text>
                 </View>
+                {mealAnalysisStatus === 'error' && mealAnalysisError ? (
+                  <Text numberOfLines={2} style={styles.analysisError}>{mealAnalysisError}</Text>
+                ) : null}
               </View>
             </ImageBackground>
           </View>
@@ -125,17 +172,56 @@ export default function HomeScreen() {
               <View>
                 <Text style={styles.sectionLabel}>VALOR ENERGÉTICO</Text>
                 <View style={styles.energyValueRow}>
-                  <Text style={styles.energyValue}>685</Text>
+                  <Text style={styles.energyValue}>{calories}</Text>
                   <Text style={styles.energyUnit}>KCAL</Text>
                 </View>
               </View>
-              <View style={styles.scorePill}><Text style={styles.scoreText}>◎ Score: 96/100</Text></View>
+              <View style={styles.scorePill}>
+                <Text style={styles.scoreText}>
+                  {hasAnalysis ? `◎ Score: ${Math.round(averageConfidence * 100)}/100` : '◎ SIN ANÁLISIS'}
+                </Text>
+              </View>
             </View>
             <View style={styles.macrosRow}>
-              <MacroCard label="PROTEÍNAS" value="52g" progress={82} color={COLORS.blue} />
-              <MacroCard label="CARBOHIDRATOS" value="44g" progress={61} color="#A855F7" />
-              <MacroCard label="GRASAS" value="21g" progress={46} color="#9333EA" />
+              <MacroCard
+                label="PROTEÍNAS"
+                value={protein}
+                progress={getMacroCaloriePercentage(nutrition?.protein ?? 0, 4, totalCalories)}
+                color={COLORS.blue}
+              />
+              <MacroCard
+                label="CARBOHIDRATOS"
+                value={carbohydrates}
+                progress={getMacroCaloriePercentage(nutrition?.carbohydrates ?? 0, 4, totalCalories)}
+                color="#A855F7"
+              />
+              <MacroCard
+                label="GRASAS"
+                value={fat}
+                progress={getMacroCaloriePercentage(nutrition?.fat ?? 0, 9, totalCalories)}
+                color="#9333EA"
+              />
             </View>
+            {hasAnalysis && foods.length > 0 ? (
+              <View style={styles.detectedFoods}>
+                <Text style={styles.detectedFoodsTitle}>ALIMENTOS DETECTADOS</Text>
+                {foods.map((food, index) => (
+                  <View key={`${food.name}-${index}`} style={styles.detectedFoodRow}>
+                    <View style={styles.detectedFoodCopy}>
+                      <Text numberOfLines={1} style={styles.detectedFoodName}>{food.name}</Text>
+                      <Text style={styles.detectedFoodMeta}>
+                        {formatRounded(food.estimatedGrams)}g · {formatRounded(food.nutrition.calories)} kcal
+                      </Text>
+                    </View>
+                    <View style={[styles.sourcePill, food.isEstimated && styles.estimatedSourcePill]}>
+                      <Text style={styles.sourceText}>
+                        {food.isEstimated ? `${food.source} · EST.` : food.source}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.dailyCard}>
@@ -231,6 +317,7 @@ const styles = StyleSheet.create({
   mealResultBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   mealName: { flex: 1, color: COLORS.text, fontSize: 17, fontWeight: '800', paddingRight: 8 },
   kcalLabel: { color: COLORS.text, fontSize: 8, fontWeight: '900', letterSpacing: 1.5 },
+  analysisError: { color: '#FDA4AF', fontSize: 9, lineHeight: 13, marginTop: 6 },
   energyCard: { backgroundColor: COLORS.panel, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border, padding: 12, marginBottom: 12 },
   energyTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionLabel: { color: '#AEBAD0', fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
@@ -245,6 +332,15 @@ const styles = StyleSheet.create({
   macroValue: { color: COLORS.text, fontSize: 19, fontWeight: '900', marginVertical: 3 },
   macroTrack: { height: 8, borderRadius: 4, backgroundColor: '#050A13', overflow: 'hidden', marginTop: 4 },
   macroFill: { height: '100%', borderRadius: 4 },
+  detectedFoods: { borderTopWidth: 1, borderTopColor: '#203A64', marginTop: 14, paddingTop: 12, gap: 9 },
+  detectedFoodsTitle: { color: '#AEBAD0', fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
+  detectedFoodRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  detectedFoodCopy: { flex: 1 },
+  detectedFoodName: { color: COLORS.text, fontSize: 12, fontWeight: '800' },
+  detectedFoodMeta: { color: COLORS.muted, fontSize: 9, fontWeight: '700', marginTop: 2 },
+  sourcePill: { borderWidth: 1, borderColor: '#256579', borderRadius: 4, backgroundColor: '#142534', paddingHorizontal: 7, paddingVertical: 4 },
+  estimatedSourcePill: { borderColor: '#A855F7', backgroundColor: '#291847' },
+  sourceText: { color: COLORS.cyan, fontSize: 7, fontWeight: '900', letterSpacing: 0.8 },
   dailyCard: { minHeight: 86, backgroundColor: COLORS.panel, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
   ring: { width: 53, height: 53, borderRadius: 27, borderWidth: 6, borderColor: COLORS.blue, borderLeftColor: '#243450', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-18deg' }] },
   ringInner: { transform: [{ rotate: '18deg' }] },
