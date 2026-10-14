@@ -75,6 +75,7 @@ function normalizeFood(food: USDAFood): USDAFoodResult | null {
 
 export async function searchUSDA(
   foodName: string,
+  signal?: AbortSignal,
 ): Promise<USDAFoodResult | null> {
   const url = new URL(USDA_SEARCH_URL);
   url.searchParams.set("api_key", getApiKey());
@@ -88,7 +89,7 @@ export async function searchUSDA(
       dataType: USDA_DATA_TYPES,
       requireAllWords: true,
     }),
-    signal: AbortSignal.timeout(10_000),
+    signal: signal ?? AbortSignal.timeout(10_000),
   });
 
   const responseBody = await response.text();

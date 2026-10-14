@@ -10,21 +10,35 @@ function jsonResponse(body: unknown) {
   });
 }
 
-async function withMockedGemini(
+async function withMockedGroq(
   responses: unknown[],
-  run: (requests: Record<string, unknown>[]) => Promise<void>,
+  run: (
+    requests: Array<{
+      url: string;
+      headers: Headers;
+      body: Record<string, unknown>;
+    }>,
+  ) => Promise<void>,
 ) {
   const originalFetch = globalThis.fetch;
-  const originalApiKey = Deno.env.get("GEMINI_API_KEY");
-  const requests: Record<string, unknown>[] = [];
+  const originalApiKey = Deno.env.get("GROQ_API_KEY");
+  const requests: Array<{
+    url: string;
+    headers: Headers;
+    body: Record<string, unknown>;
+  }> = [];
 
-  Deno.env.set("GEMINI_API_KEY", "test-api-key");
-  globalThis.fetch = async (_input, init) => {
-    const body = init && "body" in init ? init.body : undefined;
-    requests.push(JSON.parse(String(body)) as Record<string, unknown>);
+  Deno.env.set("GROQ_API_KEY", "test-api-key");
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    requests.push({
+      url: request.url,
+      headers: request.headers,
+      body: JSON.parse(await request.text()) as Record<string, unknown>,
+    });
     const response = responses.shift();
 
-    if (!response) throw new Error("Missing mocked Gemini response");
+    if (!response) throw new Error("Missing mocked Groq response");
 
     return await Promise.resolve(jsonResponse(response));
   };
@@ -35,17 +49,17 @@ async function withMockedGemini(
     globalThis.fetch = originalFetch;
 
     if (originalApiKey === undefined) {
-      Deno.env.delete("GEMINI_API_KEY");
+      Deno.env.delete("GROQ_API_KEY");
     } else {
-      Deno.env.set("GEMINI_API_KEY", originalApiKey);
+      Deno.env.set("GROQ_API_KEY", originalApiKey);
     }
   }
 }
 
-Deno.test("sends a Base64 image as Gemini inline data", async () => {
-  await withMockedGemini(
+Deno.test("sends a Base64 image to Qwen through Groq", async () => {
+  await withMockedGroq(
     [{
-      candidates: [{ content: { role: "model", parts: [{ text: "meal" }] } }],
+      choices: [{ message: { role: "assistant", content: "meal" } }],
     }],
     async (requests) => {
       const result = await handleAIService({
@@ -53,85 +67,42 @@ Deno.test("sends a Base64 image as Gemini inline data", async () => {
         image: { mimeType: "image/jpeg", data: "base64-image" },
       });
 
-      assert(result.text === "meal", "Expected Gemini text response");
-      assert(requests.length === 1, "Expected one Gemini request");
+      assert(result.text === "meal", "Expected Qwen text response");
+      assert(requests.length === 1, "Expected one Groq request");
+      assert(
+        requests[0].url ===
+          "https://api.groq.com/openai/v1/chat/completions",
+        "Expected the Groq chat completions endpoint",
+      );
+      assert(
+        requests[0].headers.get("Authorization") === "Bearer test-api-key",
+        "Expected the Groq bearer token",
+      );
+      assert(
+        requests[0].body.model === "qwen/qwen3.8-27b",
+        "Expected Qwen 3.8 27B",
+      );
+      assert(
+        requests[0].body.max_completion_tokens === 600,
+        "Expected a 600-token completion limit",
+      );
+      assert(
+        requests[0].body.temperature === 0.1,
+        "Expected a 0.1 temperature",
+      );
 
-      const contents = requests[0].contents as Array<{
-        parts: Array<Record<string, unknown>>;
+      const messages = requests[0].body.messages as Array<{
+        content: Array<Record<string, unknown>>;
       }>;
       assert(
-        JSON.stringify(contents[0].parts[0]) ===
+        JSON.stringify(messages[0].content[1]) ===
           JSON.stringify({
-            inlineData: { mimeType: "image/jpeg", data: "base64-image" },
+            type: "image_url",
+            image_url: {
+              url: "data:image/jpeg;base64,base64-image",
+            },
           }),
-        "Expected inline Base64 image",
-      );
-    },
-  );
-});
-
-Deno.test("executes tools and sends their results back to Gemini", async () => {
-  const functionCallPart = {
-    functionCall: {
-      id: "call-1",
-      name: "findByFood",
-      args: { name: "apple", estimatedGrams: 100 },
-    },
-    thoughtSignature: "signature",
-  };
-
-  await withMockedGemini(
-    [
-      {
-        candidates: [{
-          content: { role: "model", parts: [functionCallPart] },
-        }],
-      },
-      {
-        candidates: [{
-          content: { role: "model", parts: [{ text: "Apple identified" }] },
-        }],
-      },
-    ],
-    async (requests) => {
-      const result = await handleAIService({
-        prompt: "Identify the food",
-        tools: [{
-          name: "findByFood",
-          description: "Find nutrition information",
-          parameters: {
-            type: "object",
-            properties: { name: { type: "string" } },
-            required: ["name"],
-          },
-          handler: ({ name }) => ({ name, calories: 52 }),
-        }],
-      });
-
-      assert(result.text === "Apple identified", "Expected final Gemini text");
-      assert(result.functionCalls?.length === 1, "Expected one function call");
-      assert(requests.length === 2, "Expected two Gemini requests");
-
-      const secondContents = requests[1].contents as Array<{
-        role: string;
-        parts: Array<Record<string, unknown>>;
-      }>;
-      assert(
-        secondContents[1].parts[0].thoughtSignature === "signature",
-        "Expected Gemini thought signature to be preserved",
-      );
-
-      const functionResponse = secondContents[2].parts[0].functionResponse as {
-        id: string;
-        response: Record<string, unknown>;
-      };
-      assert(
-        functionResponse.id === "call-1",
-        "Expected matching function call id",
-      );
-      assert(
-        functionResponse.response.calories === 52,
-        "Expected handler result in function response",
+        "Expected a Base64 image data URL",
       );
     },
   );

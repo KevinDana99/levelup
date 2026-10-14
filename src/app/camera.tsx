@@ -91,7 +91,7 @@ export default function CameraScreen() {
               <Text style={styles.previewButtonText}>↻ [ REPETIR ]</Text>
             </Pressable>
             <Pressable style={[styles.previewButton, styles.useButton]} onPress={confirmPhoto}>
-              <Text style={styles.previewButtonText}>✓ [ USAR FOTO ]</Text>
+              <Text style={styles.previewButtonText}>✓ [ CONFIRMAR ]</Text>
             </Pressable>
           </View>
         </SafeAreaView>

@@ -63,6 +63,7 @@ function normalizeProduct(
 
 export async function searchOpenFoodFacts(
   foodName: string,
+  signal?: AbortSignal,
 ): Promise<OpenFoodFactsResult | null> {
   const response = await fetch(OPEN_FOOD_FACTS_SEARCH_URL, {
     method: "POST",
@@ -76,7 +77,7 @@ export async function searchOpenFoodFacts(
       page_size: 10,
       fields: ["code", "product_name", "generic_name", "nutriments"],
     }),
-    signal: AbortSignal.timeout(10_000),
+    signal: signal ?? AbortSignal.timeout(10_000),
   });
   const responseBody = await response.text();
 

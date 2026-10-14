@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import {
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMealCapture } from '../../context/MealCaptureContext';
+import { confirmMeal } from '../../services/confirmMeal';
 
 const COLORS = {
   background: '#050912',
@@ -27,6 +28,7 @@ const COLORS = {
 const MEAL_IMAGE = require('../../../assets/meal-salmon.jpg');
 
 type MacroCardProps = { label: string; value: string; progress: number; color: string };
+type MealConfirmationStatus = 'idle' | 'loading' | 'success' | 'error';
 
 function formatRounded(value: number) {
   return Math.round(value).toLocaleString('es-AR');
@@ -53,8 +55,11 @@ export default function HomeScreen() {
   const [water, setWater] = useState(2.8);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [isOpeningCamera, setIsOpeningCamera] = useState(false);
+  const [confirmationStatus, setConfirmationStatus] = useState<MealConfirmationStatus>('idle');
+  const [confirmationError, setConfirmationError] = useState<string | null>(null);
   const { mealAnalysis, mealAnalysisError, mealAnalysisStatus, mealPhotoUri } = useMealCapture();
-  const registered = Boolean(mealPhotoUri);
+  const hasMealPhoto = Boolean(mealPhotoUri);
+  const registered = confirmationStatus === 'success';
   const waterPercent = Math.min((water / 3.5) * 100, 100);
   const foods = mealAnalysis?.foods ?? [];
   const nutrition = mealAnalysis?.totalNutrition;
@@ -88,6 +93,11 @@ export default function HomeScreen() {
   const fat = hasAnalysis && nutrition ? `${formatRounded(nutrition.fat)}g` : '0g';
   const totalCalories = nutrition?.calories ?? 0;
 
+  useEffect(() => {
+    setConfirmationStatus('idle');
+    setConfirmationError(null);
+  }, [mealAnalysis]);
+
   const openCamera = async () => {
     if (isOpeningCamera) return;
 
@@ -99,6 +109,31 @@ export default function HomeScreen() {
       router.push('/camera');
     } finally {
       setIsOpeningCamera(false);
+    }
+  };
+
+  const registerMeal = async () => {
+    if (!mealAnalysis || mealAnalysisStatus !== 'success') return;
+    if (confirmationStatus === 'loading' || confirmationStatus === 'success') return;
+
+    setConfirmationStatus('loading');
+    setConfirmationError(null);
+
+    try {
+      await confirmMeal({
+        foods: mealAnalysis.foods.map((food) => ({
+          name: food.name,
+          estimatedGrams: food.estimatedGrams,
+          nutrition: food.nutrition,
+        })),
+        consumedAt: new Date().toISOString(),
+      });
+      setConfirmationStatus('success');
+    } catch (error) {
+      setConfirmationError(
+        error instanceof Error ? error.message : 'No se pudo registrar la comida',
+      );
+      setConfirmationStatus('error');
     }
   };
 
@@ -123,7 +158,13 @@ export default function HomeScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.scannerCard}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={hasMealPhoto ? 'Tomar otra foto de la comida' : 'Tomar una foto de la comida'}
+            disabled={isOpeningCamera}
+            onPress={openCamera}
+            style={({ pressed }) => [styles.scannerCard, pressed && styles.scannerCardPressed]}
+          >
             <ImageBackground source={mealPhotoUri ? { uri: mealPhotoUri } : MEAL_IMAGE} style={styles.mealImage} imageStyle={styles.mealImageRadius}>
               <View style={styles.imageShade} />
               <View style={styles.scannerTopRow}>
@@ -165,7 +206,7 @@ export default function HomeScreen() {
                 ) : null}
               </View>
             </ImageBackground>
-          </View>
+          </Pressable>
 
           <View style={styles.energyCard}>
             <View style={styles.energyTop}>
@@ -244,13 +285,30 @@ export default function HomeScreen() {
 
           <Pressable
             accessibilityRole="button"
-            disabled={isOpeningCamera}
-            onPress={openCamera}
-            style={({ pressed }) => [styles.registerButton, pressed && styles.registerButtonPressed]}
+            accessibilityLabel="Registrar comida"
+            accessibilityState={{
+              disabled: !hasAnalysis || confirmationStatus === 'loading' || registered,
+            }}
+            disabled={!hasAnalysis || confirmationStatus === 'loading' || registered}
+            onPress={registerMeal}
+            style={({ pressed }) => [
+              styles.registerButton,
+              (!hasAnalysis || confirmationStatus === 'loading' || registered) && styles.registerButtonDisabled,
+              pressed && styles.registerButtonPressed,
+            ]}
           >
-            <Text style={styles.registerIcon}>{isOpeningCamera ? '…' : registered ? '✓' : '⊕'}</Text>
-            <Text style={styles.registerText}>{isOpeningCamera ? '[ ABRIENDO CÁMARA ]' : registered ? '[ TOMAR OTRA FOTO ]' : '[ REGISTRAR COMIDA ]'}</Text>
+            <Text style={styles.registerIcon}>{registered ? '✓' : '⊕'}</Text>
+            <Text style={styles.registerText}>
+              {confirmationStatus === 'loading'
+                ? '[ REGISTRANDO... ]'
+                : registered
+                  ? '[ COMIDA REGISTRADA ]'
+                  : '[ REGISTRAR COMIDA ]'}
+            </Text>
           </Pressable>
+          {confirmationError ? (
+            <Text style={styles.registrationError}>{confirmationError}</Text>
+          ) : null}
 
           <View style={styles.todayHeader}>
             <Text style={styles.sectionLabel}>COMIDAS DE HOY</Text>
@@ -296,6 +354,7 @@ const styles = StyleSheet.create({
   settingsButton: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   settingsIcon: { color: COLORS.blueBright, fontSize: 28, fontWeight: '300' },
   scannerCard: { height: 300, borderRadius: 9, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 12 },
+  scannerCardPressed: { opacity: 0.82 },
   mealImage: { flex: 1, padding: 12, justifyContent: 'space-between' },
   mealImageRadius: { borderRadius: 8 },
   imageShade: { position: 'absolute', inset: 0, backgroundColor: 'rgba(3, 8, 18, 0.26)' },
@@ -357,9 +416,11 @@ const styles = StyleSheet.create({
   waterFill: { height: '100%', backgroundColor: COLORS.blue, borderRadius: 3 },
   pressed: { opacity: 0.7 },
   registerButton: { height: 53, borderRadius: 12, backgroundColor: '#347CF0', borderWidth: 1, borderColor: COLORS.blueBright, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 17, shadowColor: COLORS.blue, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 5 },
+  registerButtonDisabled: { opacity: 0.48 },
   registerButtonPressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
   registerIcon: { color: '#FFFFFF', fontSize: 22, fontWeight: '900' },
   registerText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', letterSpacing: 1.2 },
+  registrationError: { color: '#FDA4AF', fontSize: 10, lineHeight: 14, marginTop: -9, marginBottom: 14 },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 3, marginBottom: 8 },
   countBadge: { backgroundColor: '#6D28D9', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 2 },
   countText: { color: '#FFFFFF', fontSize: 8, fontWeight: '900', letterSpacing: 1 },

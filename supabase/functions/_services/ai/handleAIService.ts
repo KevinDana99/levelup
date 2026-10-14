@@ -1,198 +1,126 @@
-import type { AIRequestDTO, AIResponseDTO, AITool } from "./AIContracts.ts";
+import type { AIRequestDTO, AIResponseDTO } from "./AIContracts.ts";
 
-const GEMINI_API_BASE_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
-const MAX_FUNCTION_CALL_ROUNDS = 8;
-const TOOL_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$/;
+const GROQ_CHAT_COMPLETIONS_URL =
+  "https://api.groq.com/openai/v1/chat/completions";
+const DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b";
 
-type GeminiFunctionCall = {
-  id?: string;
-  name: string;
-  args?: Record<string, unknown>;
+type GroqTextContent = {
+  type: "text";
+  text: string;
 };
 
-type GeminiPart = {
-  text?: string;
-  functionCall?: GeminiFunctionCall;
-  thoughtSignature?: string;
-  [key: string]: unknown;
-};
-
-type GeminiContent = {
-  role: "user" | "model";
-  parts: GeminiPart[];
-};
-
-type GeminiResponse = {
-  candidates?: Array<{
-    content?: GeminiContent;
-    finishReason?: string;
-  }>;
-  error?: {
-    code?: number;
-    message?: string;
-    status?: string;
+type GroqImageContent = {
+  type: "image_url";
+  image_url: {
+    url: string;
   };
 };
 
-type ExecutedFunctionCall = NonNullable<AIResponseDTO["functionCalls"]>[number];
+type GroqMessage = {
+  role: "system" | "user";
+  content: string | Array<GroqTextContent | GroqImageContent>;
+};
+
+type GroqResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+    finish_reason?: string;
+  }>;
+  error?: {
+    message?: string;
+    type?: string;
+    code?: string;
+  };
+};
 
 function getRequiredApiKey() {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  const apiKey = Deno.env.get("GROQ_API_KEY")?.trim();
 
   if (!apiKey) {
-    throw new Error("Missing GEMINI_API_KEY Supabase secret");
+    throw new Error("Missing GROQ_API_KEY Supabase secret");
   }
 
   return apiKey;
 }
 
 function getModel() {
-  return Deno.env.get("GEMINI_MODEL")?.trim() || DEFAULT_GEMINI_MODEL;
+  return Deno.env.get("GROQ_MODEL")?.trim() || DEFAULT_GROQ_MODEL;
 }
 
-function createInitialContent(input: AIRequestDTO): GeminiContent {
-  const parts: GeminiPart[] = [];
+function createMessages(input: AIRequestDTO): GroqMessage[] {
+  const messages: GroqMessage[] = [];
 
-  if (input.image) {
-    parts.push({
-      inlineData: {
-        mimeType: input.image.mimeType,
-        data: input.image.data,
-      },
-    });
+  if (input.systemInstruction) {
+    messages.push({ role: "system", content: input.systemInstruction });
   }
 
-  parts.push({ text: input.prompt });
+  messages.push({
+    role: "user",
+    content: input.image
+      ? [
+        { type: "text", text: input.prompt },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:${input.image.mimeType};base64,${input.image.data}`,
+          },
+        },
+      ]
+      : input.prompt,
+  });
 
-  return { role: "user", parts };
+  return messages;
 }
 
-function createToolDeclarations(tools: AITool[]) {
-  if (tools.length === 0) return undefined;
-
-  return [{
-    functionDeclarations: tools.map(({ name, description, parameters }) => ({
-      name,
-      description,
-      parameters,
-    })),
-  }];
-}
-
-function validateTools(tools: AITool[]) {
-  const names = new Set<string>();
-
-  for (const tool of tools) {
-    if (!TOOL_NAME_PATTERN.test(tool.name)) {
-      throw new Error(`Invalid AI tool name: ${tool.name}`);
-    }
-
-    if (names.has(tool.name)) {
-      throw new Error(`Duplicate AI tool name: ${tool.name}`);
-    }
-
-    if (!tool.description.trim()) {
-      throw new Error(`AI tool ${tool.name} requires a description`);
-    }
-
-    names.add(tool.name);
-  }
-}
-
-function asObjectResponse(result: unknown): Record<string, unknown> {
-  if (typeof result === "object" && result !== null && !Array.isArray(result)) {
-    return result as Record<string, unknown>;
-  }
-
-  return { result };
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : "Unknown tool execution error";
-}
-
-async function executeFunctionCall(
-  functionCall: GeminiFunctionCall,
-  toolsByName: Map<string, AITool>,
-) {
-  const args = functionCall.args ?? {};
-  const tool = toolsByName.get(functionCall.name);
-  let result: unknown;
-
-  if (!tool) {
-    result = { error: `Unknown or unregistered tool: ${functionCall.name}` };
-  } else {
-    try {
-      result = await tool.handler(args);
-    } catch (error) {
-      result = { error: errorMessage(error) };
-    }
-  }
-
-  const executedCall: ExecutedFunctionCall = {
-    name: functionCall.name,
-    args,
-    result,
-  };
-
-  const responsePart: GeminiPart = {
-    functionResponse: {
-      ...(functionCall.id ? { id: functionCall.id } : {}),
-      name: functionCall.name,
-      response: asObjectResponse(result),
-    },
-  };
-
-  return { executedCall, responsePart };
-}
-
-async function generateContent(
+async function createChatCompletion(
   apiKey: string,
   model: string,
-  body: Record<string, unknown>,
+  messages: GroqMessage[],
 ) {
-  const response = await fetch(
-    `${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(body),
+  const response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({
+      model,
+      messages,
+      max_completion_tokens: 600,
+      temperature: 0.1,
+    }),
+  });
 
   const responseBody = await response.text();
-  let payload: GeminiResponse;
+  let payload: GroqResponse;
 
   try {
-    payload = JSON.parse(responseBody) as GeminiResponse;
+    payload = JSON.parse(responseBody) as GroqResponse;
   } catch {
     throw new Error(
-      `Gemini returned an invalid response (HTTP ${response.status})`,
+      `Groq returned an invalid response (HTTP ${response.status})`,
     );
   }
 
   if (!response.ok) {
     const detail = payload.error?.message ?? `HTTP ${response.status}`;
-    throw new Error(`Gemini request failed: ${detail}`);
+    throw new Error(`Groq request failed: ${detail}`);
   }
 
-  const content = payload.candidates?.[0]?.content;
+  const choice = payload.choices?.[0];
+  const text = choice?.message?.content?.trim();
 
-  if (!content?.parts?.length) {
-    const finishReason = payload.candidates?.[0]?.finishReason;
+  if (!text) {
     throw new Error(
-      `Gemini returned no content${finishReason ? ` (${finishReason})` : ""}`,
+      `Qwen returned no text content${
+        choice?.finish_reason ? ` (${choice.finish_reason})` : ""
+      }`,
     );
   }
 
-  return content;
+  return text;
 }
 
 export async function handleAIService(
@@ -210,59 +138,13 @@ export async function handleAIService(
     throw new Error("AI image mimeType must start with image/");
   }
 
-  const apiKey = getRequiredApiKey();
-  const model = getModel();
-  const tools = input.tools ?? [];
-  validateTools(tools);
-  const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
-  const toolDeclarations = createToolDeclarations(tools);
-  const contents: GeminiContent[] = [createInitialContent(input)];
-  const functionCalls: ExecutedFunctionCall[] = [];
+  const text = await createChatCompletion(
+    getRequiredApiKey(),
+    getModel(),
+    createMessages(input),
+  );
 
-  for (let round = 0; round <= MAX_FUNCTION_CALL_ROUNDS; round += 1) {
-    const content = await generateContent(apiKey, model, {
-      contents,
-      ...(input.systemInstruction
-        ? { systemInstruction: { parts: [{ text: input.systemInstruction }] } }
-        : {}),
-      ...(toolDeclarations ? { tools: toolDeclarations } : {}),
-    });
-
-    const requestedCalls = content.parts.flatMap((part) =>
-      part.functionCall ? [part.functionCall] : []
-    );
-
-    if (requestedCalls.length === 0) {
-      const text = content.parts
-        .flatMap((part) => typeof part.text === "string" ? [part.text] : [])
-        .join("\n")
-        .trim();
-
-      return {
-        text,
-        ...(functionCalls.length > 0 ? { functionCalls } : {}),
-      };
-    }
-
-    if (round === MAX_FUNCTION_CALL_ROUNDS) {
-      throw new Error("Gemini exceeded the maximum function-call rounds");
-    }
-
-    const executed = await Promise.all(
-      requestedCalls.map((functionCall) =>
-        executeFunctionCall(functionCall, toolsByName)
-      ),
-    );
-
-    functionCalls.push(...executed.map(({ executedCall }) => executedCall));
-    contents.push(content);
-    contents.push({
-      role: "user",
-      parts: executed.map(({ responsePart }) => responsePart),
-    });
-  }
-
-  throw new Error("Gemini function-call loop ended unexpectedly");
+  return { text };
 }
 
 export type { HandleAIService } from "./AIContracts.ts";

@@ -34,7 +34,13 @@ Deno.test("normalizes USDA values and scales them to estimated grams", async () 
     const result = await handleFindByFood({
       name: "salmon cooked dry heat",
       estimatedGrams: 175,
-    });
+      estimatedNutritionPer100Grams: {
+        calories: 190,
+        protein: 19,
+        carbohydrates: 0,
+        fat: 9,
+      },
+    }, new AbortController().signal);
 
     assertEquals(result, {
       name: "Fish, salmon, cooked, dry heat",
@@ -91,7 +97,13 @@ Deno.test("falls back to Open Food Facts and scales its values", async () => {
     const result = await handleFindByFood({
       name: "natural peanut butter",
       estimatedGrams: 30,
-    });
+      estimatedNutritionPer100Grams: {
+        calories: 590,
+        protein: 24,
+        carbohydrates: 21,
+        fat: 49,
+      },
+    }, new AbortController().signal);
 
     assertEquals(requestCount, 2);
     assertEquals(result, {
@@ -111,12 +123,10 @@ Deno.test("falls back to Open Food Facts and scales its values", async () => {
   }
 });
 
-Deno.test("uses Gemini as the final fallback and keeps scaling in the handler", async () => {
+Deno.test("uses the existing Gemini estimate when USDA and OFF miss", async () => {
   const originalFetch = globalThis.fetch;
-  const originalGeminiApiKey = Deno.env.get("GEMINI_API_KEY");
   let requestCount = 0;
 
-  Deno.env.set("GEMINI_API_KEY", "test-gemini-key");
   globalThis.fetch = () => {
     requestCount += 1;
 
@@ -128,37 +138,24 @@ Deno.test("uses Gemini as the final fallback and keeps scaling in the handler", 
       return Promise.resolve(new Response(JSON.stringify({ hits: [] })));
     }
 
-    return Promise.resolve(
-      new Response(JSON.stringify({
-        candidates: [{
-          content: {
-            role: "model",
-            parts: [{
-              text: JSON.stringify({
-                name: "Homemade vegetable pie",
-                nutritionPer100Grams: {
-                  calories: 180,
-                  protein: 6,
-                  carbohydrates: 24,
-                  fat: 7,
-                },
-              }),
-            }],
-          },
-        }],
-      })),
-    );
+    return Promise.resolve(new Response(JSON.stringify({ hits: [] })));
   };
 
   try {
     const result = await handleFindByFood({
       name: "homemade vegetable pie",
       estimatedGrams: 250,
-    });
+      estimatedNutritionPer100Grams: {
+        calories: 180,
+        protein: 6,
+        carbohydrates: 24,
+        fat: 7,
+      },
+    }, new AbortController().signal);
 
-    assertEquals(requestCount, 3);
+    assertEquals(requestCount, 2);
     assertEquals(result, {
-      name: "Homemade vegetable pie",
+      name: "homemade vegetable pie",
       estimatedGrams: 250,
       nutrition: {
         calories: 450,
@@ -171,11 +168,5 @@ Deno.test("uses Gemini as the final fallback and keeps scaling in the handler", 
     });
   } finally {
     globalThis.fetch = originalFetch;
-
-    if (originalGeminiApiKey === undefined) {
-      Deno.env.delete("GEMINI_API_KEY");
-    } else {
-      Deno.env.set("GEMINI_API_KEY", originalGeminiApiKey);
-    }
   }
 });

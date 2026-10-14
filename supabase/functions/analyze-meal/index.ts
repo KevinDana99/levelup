@@ -2,6 +2,7 @@ import { handleAIService } from "../_services/ai/handleAIService.ts";
 import { AnalyzeMealRequestSchema } from "./dtos/AnalyzeMealRequestDTO.ts";
 import { AnalyzeMealResponseSchema } from "./dtos/AnalyzeMealResponseDTO.ts";
 import { handleFindByFood } from "./tools/handleFindByFood.ts";
+import { NutritionSchema } from "../_shared/dtos/NutritionDTO.ts";
 import { z } from "zod";
 
 const DetectedFoodsSchema = z.object({
@@ -10,8 +11,11 @@ const DetectedFoodsSchema = z.object({
     searchName: z.string().trim().min(1),
     estimatedGrams: z.number().positive(),
     confidence: z.number().min(0).max(1),
+    estimatedNutritionPer100Grams: NutritionSchema,
   })).min(1),
 });
+
+const EXTERNAL_LOOKUP_TIMEOUT_MS = 30_000;
 
 const corsHeaders = {
   "Access-Control-Allow-Headers":
@@ -47,7 +51,7 @@ function parseAIResponse(text: string) {
   const objectEnd = withoutCodeFence.lastIndexOf("}");
 
   if (objectStart === -1 || objectEnd < objectStart) {
-    throw new Error("Gemini response does not contain a JSON object");
+    throw new Error("AI response does not contain a JSON object");
   }
 
   return JSON.parse(withoutCodeFence.slice(objectStart, objectEnd + 1));
@@ -60,8 +64,8 @@ Analizá la comida visible en la imagen. El tamaño informado del plato es: ${pl
 Identificá cada alimento visible y estimá su peso en gramos y el nivel de confianza
 entre 0 y 1. Para cada alimento generá también un nombre de búsqueda específico en
 inglés y compatible con USDA, incluyendo el método de cocción cuando sea visible.
-
-No estimes calorías ni nutrientes: el servidor los resolverá usando fuentes externas.
+Estimá además sus valores nutricionales por cada 100 gramos. Esa estimación se usará
+únicamente como fallback si las fuentes nutricionales externas no responden.
 
 Respondé únicamente con JSON válido y exactamente con esta estructura:
 {
@@ -70,7 +74,13 @@ Respondé únicamente con JSON válido y exactamente con esta estructura:
       "name": "nombre visible del alimento en español",
       "searchName": "specific USDA search name in English",
       "estimatedGrams": 0,
-      "confidence": 0
+      "confidence": 0,
+      "estimatedNutritionPer100Grams": {
+        "calories": 0,
+        "protein": 0,
+        "carbohydrates": 0,
+        "fat": 0
+      }
     }
   ]
 }
@@ -85,12 +95,21 @@ function roundNutrition(value: number) {
 
 async function enrichDetectedFoods(input: unknown) {
   const detected = DetectedFoodsSchema.parse(input);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    EXTERNAL_LOOKUP_TIMEOUT_MS,
+  );
   const foods = await Promise.all(
     detected.foods.map(async (food) => {
-      const nutrition = await handleFindByFood({
-        name: food.searchName,
-        estimatedGrams: food.estimatedGrams,
-      });
+      const nutrition = await handleFindByFood(
+        {
+          name: food.searchName,
+          estimatedGrams: food.estimatedGrams,
+          estimatedNutritionPer100Grams: food.estimatedNutritionPer100Grams,
+        },
+        controller.signal,
+      );
 
       return {
         name: food.name,
@@ -101,7 +120,7 @@ async function enrichDetectedFoods(input: unknown) {
         isEstimated: nutrition.isEstimated,
       };
     }),
-  );
+  ).finally(() => clearTimeout(timeoutId));
 
   const totalNutrition = foods.reduce(
     (total, food) => ({
@@ -166,6 +185,16 @@ Deno.serve(async (request) => {
     return jsonResponse(response);
   } catch (error) {
     console.error("analyze-meal failed", error);
-    return jsonResponse({ error: "Unable to analyze meal" }, 500);
+    const detail = error instanceof Error
+      ? error.message
+      : "Unknown analyze-meal error";
+
+    return jsonResponse(
+      {
+        error: "Unable to analyze meal",
+        detail,
+      },
+      500,
+    );
   }
 });
