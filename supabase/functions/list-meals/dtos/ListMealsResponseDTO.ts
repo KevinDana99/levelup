@@ -16,8 +16,8 @@ const MealFoodSchema = z.object({
 
 const MealSchema = z.object({
   mealId: z.string().uuid(),
-  consumedAt: z.string().datetime(),
-  createdAt: z.string().datetime(),
+  consumedAt: z.string().datetime({ offset: true }),
+  createdAt: z.string().datetime({ offset: true }),
   totalNutrition: NutritionSchema,
   foods: z.array(MealFoodSchema),
 });

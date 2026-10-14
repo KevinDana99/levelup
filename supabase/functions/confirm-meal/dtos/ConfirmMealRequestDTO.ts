@@ -15,7 +15,7 @@ const ConfirmedFoodSchema = z.object({
 
 export const ConfirmMealRequestSchema = z.object({
   foods: z.array(ConfirmedFoodSchema).min(1),
-  consumedAt: z.string().datetime().optional(),
+  consumedAt: z.string().datetime({ offset: true }).optional(),
 });
 
 export type ConfirmMealRequestDTO = z.infer<typeof ConfirmMealRequestSchema>;

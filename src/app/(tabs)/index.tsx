@@ -11,7 +11,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMealCapture } from '../../context/MealCaptureContext';
+import { useDailyNutrition } from '../../hooks/useDailyNutrition';
 import { confirmMeal } from '../../services/confirmMeal';
+import {
+  DAILY_CALORIE_TARGET,
+  getCalorieProgress,
+} from '../../utils/dailyNutrition';
 
 const COLORS = {
   background: '#050912',
@@ -57,6 +62,11 @@ export default function HomeScreen() {
   const [isOpeningCamera, setIsOpeningCamera] = useState(false);
   const [confirmationStatus, setConfirmationStatus] = useState<MealConfirmationStatus>('idle');
   const [confirmationError, setConfirmationError] = useState<string | null>(null);
+  const {
+    meals: dailyMeals,
+    totals: dailyTotals,
+    refresh: refreshDailyNutrition,
+  } = useDailyNutrition();
   const { mealAnalysis, mealAnalysisError, mealAnalysisStatus, mealPhotoUri } = useMealCapture();
   const hasMealPhoto = Boolean(mealPhotoUri);
   const registered = confirmationStatus === 'success';
@@ -92,6 +102,8 @@ export default function HomeScreen() {
     : '0g';
   const fat = hasAnalysis && nutrition ? `${formatRounded(nutrition.fat)}g` : '0g';
   const totalCalories = nutrition?.calories ?? 0;
+  const dailyProgress = getCalorieProgress(dailyTotals.calories);
+  const remainingCalories = Math.max(0, DAILY_CALORIE_TARGET - dailyTotals.calories);
 
   useEffect(() => {
     setConfirmationStatus('idle');
@@ -128,6 +140,7 @@ export default function HomeScreen() {
         })),
         consumedAt: new Date().toISOString(),
       });
+      await refreshDailyNutrition();
       setConfirmationStatus('success');
     } catch (error) {
       setConfirmationError(
@@ -149,8 +162,8 @@ export default function HomeScreen() {
             <View style={styles.caloriePill}>
               <Text style={styles.flame}>♨</Text>
               <View>
-                <Text style={styles.caloriePillValue}>2,150 /</Text>
-                <Text style={styles.caloriePillTarget}>2,800 kcal</Text>
+                <Text style={styles.caloriePillValue}>{formatRounded(dailyTotals.calories)} /</Text>
+                <Text style={styles.caloriePillTarget}>{formatRounded(DAILY_CALORIE_TARGET)} kcal</Text>
               </View>
             </View>
             <Pressable style={styles.settingsButton} accessibilityLabel="Abrir configuración">
@@ -266,11 +279,11 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.dailyCard}>
-            <View style={styles.ring}><View style={styles.ringInner}><Text style={styles.ringText}>77%</Text></View></View>
+            <View style={styles.ring}><View style={styles.ringInner}><Text style={styles.ringText}>{dailyProgress}%</Text></View></View>
             <View style={styles.dailyCopy}>
               <Text style={styles.sectionLabel}>CUOTA DIARIA</Text>
-              <Text style={styles.dailyValue}>2,150 <Text style={styles.dailyTarget}>/ 2,800 kcal</Text></Text>
-              <Text style={styles.remaining}>Restante: 650 kcal</Text>
+              <Text style={styles.dailyValue}>{formatRounded(dailyTotals.calories)} <Text style={styles.dailyTarget}>/ {formatRounded(DAILY_CALORIE_TARGET)} kcal</Text></Text>
+              <Text style={styles.remaining}>Restante: {formatRounded(remainingCalories)} kcal</Text>
             </View>
             <Pressable
               accessibilityLabel="Agregar agua"
@@ -310,9 +323,23 @@ export default function HomeScreen() {
             <Text style={styles.registrationError}>{confirmationError}</Text>
           ) : null}
 
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ver comidas registradas"
+            onPress={() => router.push('/meals')}
+            style={({ pressed }) => [
+              styles.historyButton,
+              pressed && styles.historyButtonPressed,
+            ]}
+          >
+            <Text style={styles.historyButtonIcon}>▤</Text>
+            <Text style={styles.historyButtonText}>[ VER COMIDAS REGISTRADAS ]</Text>
+            <Text style={styles.historyButtonArrow}>›</Text>
+          </Pressable>
+
           <View style={styles.todayHeader}>
             <Text style={styles.sectionLabel}>COMIDAS DE HOY</Text>
-            <View style={styles.countBadge}><Text style={styles.countText}>{registered ? '3' : '2'} REGISTROS</Text></View>
+            <View style={styles.countBadge}><Text style={styles.countText}>{dailyMeals.length} REGISTROS</Text></View>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mealsList}>
             <View style={styles.mealItem}>
@@ -421,6 +448,11 @@ const styles = StyleSheet.create({
   registerIcon: { color: '#FFFFFF', fontSize: 22, fontWeight: '900' },
   registerText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', letterSpacing: 1.2 },
   registrationError: { color: '#FDA4AF', fontSize: 10, lineHeight: 14, marginTop: -9, marginBottom: 14 },
+  historyButton: { height: 49, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: '#0B1528', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, marginBottom: 19 },
+  historyButtonPressed: { transform: [{ scale: 0.985 }], opacity: 0.82 },
+  historyButtonIcon: { color: COLORS.cyan, fontSize: 18, marginRight: 10 },
+  historyButtonText: { flex: 1, color: COLORS.blueBright, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  historyButtonArrow: { color: COLORS.blueBright, fontSize: 24, marginTop: -2 },
   todayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 3, marginBottom: 8 },
   countBadge: { backgroundColor: '#6D28D9', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 2 },
   countText: { color: '#FFFFFF', fontSize: 8, fontWeight: '900', letterSpacing: 1 },

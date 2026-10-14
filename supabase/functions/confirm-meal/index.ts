@@ -53,7 +53,7 @@ Deno.serve(async (request) => {
     const savedMeal = data?.[0];
     const response = ConfirmMealResponseSchema.parse({
       mealId: savedMeal?.meal_id,
-      createdAt: savedMeal?.created_at,
+      createdAt: new Date(String(savedMeal?.created_at)).toISOString(),
       totalNutrition: {
         calories: Number(savedMeal?.total_calories),
         protein: Number(savedMeal?.total_protein),

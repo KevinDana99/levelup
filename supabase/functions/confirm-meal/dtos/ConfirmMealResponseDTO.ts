@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const ConfirmMealResponseSchema = z.object({
   mealId: z.string().uuid(),
-  createdAt: z.string().datetime(),
+  createdAt: z.string().datetime({ offset: true }),
   totalNutrition: z.object({
     calories: z.number(),
     protein: z.number(),

@@ -8,6 +8,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="camera" options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="meals" />
       </Stack>
       <StatusBar style="light" />
     </MealCaptureProvider>
